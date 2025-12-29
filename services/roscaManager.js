@@ -186,6 +186,49 @@ async function getDashboardData() {
     return data;
 }
 
+async function sendReminders() {
+    console.log("Sending reminders...");
+    let count = 0;
+    
+    if (await isDBAvailable()) {
+        // DB Logic
+        try {
+            // Get active cycle
+            const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE status = 'active' LIMIT 1");
+            if (cycleRes.rows.length === 0) return "No active cycle.";
+            
+            // Get unpaid participants
+            const res = await db.query(
+                "SELECT * FROM participants WHERE cycle_id = $1 AND has_paid = false", 
+                [cycleRes.rows[0].id]
+            );
+            
+            for (const p of res.rows) {
+                await whatsappService.sendMessage(p.phone_number, 
+                    `🔔 *Reminder*: Please make your contribution for this week's cycle.\nType *pay* to get the link.`
+                );
+                count++;
+            }
+        } catch (e) {
+            console.error("Error sending reminders (DB):", e);
+            return "Error sending reminders.";
+        }
+    } else {
+        // Memory Logic
+        if (roscaState.cycleStatus !== 'active') return "No active cycle.";
+        
+        for (const p of roscaState.participants) {
+            if (!p.hasPaid) {
+                await whatsappService.sendMessage(p.phoneNumber, 
+                    `🔔 *Reminder*: Please make your contribution for this week's cycle.\nType *pay* to get the link.`
+                );
+                count++;
+            }
+        }
+    }
+    return `Sent ${count} reminders.`;
+}
+
 module.exports = {
     processCommand,
     markParticipantAsPaid,
@@ -194,5 +237,6 @@ module.exports = {
     initiatePayment,
     getStatus,
     isDBAvailable,
-    getDashboardData
+    getDashboardData,
+    sendReminders
 };

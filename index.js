@@ -67,6 +67,23 @@ app.post('/webhook', async (req, res) => {
 const path = require('path');
 app.use(express.static('public')); // Serve static files like CSS/JS if needed later
 
+// CRON JOB ENDPOINT
+app.get('/api/cron/reminders', async (req, res) => {
+    // Security check
+    const authHeader = req.headers.authorization;
+    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).send('Unauthorized');
+    }
+
+    try {
+        const result = await roscaManager.sendReminders();
+        res.json({ success: true, message: result });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error running cron');
+    }
+});
+
 app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });

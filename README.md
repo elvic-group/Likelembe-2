@@ -11,6 +11,7 @@ This project is a WhatsApp-based **ROSCA (Rotating Savings and Credit Associatio
 *   **Database**: Neon (Serverless PostgreSQL) for persisting participants, cycles, and payment status. Includes a memory fallback if DB is unreachable.
 *   **Payments**: Stripe (Checkout Sessions) for collecting contributions.
 *   **Deployment**: Vercel (Serverless Functions).
+*   **Dashboard**: [https://likelembe-2.vercel.app/dashboard](https://likelembe-2.vercel.app/dashboard)
 
 ## Key Features
 
