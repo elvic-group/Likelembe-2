@@ -156,6 +156,36 @@ async function markParticipantAsPaid(phoneNumber) {
     }
 }
 
+async function getDashboardData() {
+    const data = {
+        cycle: { status: 'Unknown', pot_total: 0 },
+        participants: []
+    };
+
+    if (await isDBAvailable()) {
+        try {
+            const cycleRes = await db.query("SELECT * FROM rosca_cycles ORDER BY id DESC LIMIT 1");
+            if (cycleRes.rows.length > 0) {
+                data.cycle = cycleRes.rows[0];
+                const pRes = await db.query("SELECT * FROM participants WHERE cycle_id = $1", [data.cycle.id]);
+                data.participants = pRes.rows;
+            }
+        } catch (e) {
+            console.error("DB Dashboard Error:", e);
+        }
+    } else {
+        // Fallback
+        data.cycle.status = roscaState.cycleStatus;
+        data.cycle.pot_total = roscaState.potTotal;
+        data.participants = roscaState.participants.map(p => ({
+            name: p.name,
+            phone_number: p.phoneNumber,
+            has_paid: p.hasPaid
+        }));
+    }
+    return data;
+}
+
 module.exports = {
     processCommand,
     markParticipantAsPaid,
@@ -163,5 +193,6 @@ module.exports = {
     startCircle,
     initiatePayment,
     getStatus,
-    isDBAvailable
+    isDBAvailable,
+    getDashboardData
 };

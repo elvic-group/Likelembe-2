@@ -63,6 +63,24 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
+// --- DASHBOARD ---
+const path = require('path');
+app.use(express.static('public')); // Serve static files like CSS/JS if needed later
+
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/api/dashboard', async (req, res) => {
+    try {
+        const data = await roscaManager.getDashboardData();
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch data' });
+    }
+});
+// -----------------
+
 app.get('/', (req, res) => {
     res.send('ROSCA WhatsApp Bot + AI is running!');
 });
