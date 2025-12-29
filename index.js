@@ -4,9 +4,49 @@ require('dotenv').config();
 const roscaManager = require('./services/roscaManager');
 const whatsappService = require('./services/whatsappService');
 const aiService = require('./services/aiService');
+const Stripe = require('stripe');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// --- STRIPE WEBHOOK (Must be before bodyParser.json) ---
+app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(
+            req.body,
+            sig,
+            process.env.STRIPE_WEBHOOK_SECRET
+        );
+    } catch (err) {
+        console.error(`Webhook Signature Verification Failed: ${err.message}`);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        
+        // Retrieve metadata we stored when creating the link
+        const phoneNumber = session.metadata.phoneNumber;
+        
+        console.log(`Payment successful for ${phoneNumber}`);
+        
+        if (phoneNumber) {
+            const success = await roscaManager.markParticipantAsPaid(phoneNumber);
+            if (success) {
+                // Optional: Send confirmation via WhatsApp
+                await whatsappService.sendMessage(phoneNumber, "Payment received! Thank you.");
+            }
+        }
+    }
+
+    res.status(200).send('Received');
+});
+// -------------------------------------------------------
 
 app.use(bodyParser.json());
 

@@ -126,6 +126,37 @@ async function getStatus(phoneNumber) {
     return `Status: ${roscaState.cycleStatus}. Payment: ${p.hasPaid ? 'Paid' : 'Pending'}`;
 }
 
+async function markParticipantAsPaid(phoneNumber) {
+    console.log(`Marking ${phoneNumber} as paid...`);
+    
+    if (await isDBAvailable()) {
+        try {
+            // Assuming there's a 'has_paid' column or similar tracking mechanism
+            // For this MVP, we might need to add a transaction record or update a flag
+            // Let's assume a simple update for the current active/pending cycle
+            const updateRes = await db.query(
+                "UPDATE participants SET has_paid = true WHERE phone_number = $1", 
+                [phoneNumber]
+            );
+            return updateRes.rowCount > 0;
+        } catch (e) {
+            console.error("DB Error updating payment:", e);
+            return false;
+        }
+    } else {
+        // Memory Fallback
+        const participant = roscaState.participants.find(p => p.phoneNumber === phoneNumber);
+        if (participant) {
+            participant.hasPaid = true;
+            // Add to pot
+            roscaState.potTotal += roscaState.contributionAmount;
+            return true;
+        }
+        return false;
+    }
+}
+
 module.exports = {
-    processCommand
+    processCommand,
+    markParticipantAsPaid
 };
