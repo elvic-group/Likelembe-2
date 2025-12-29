@@ -158,5 +158,10 @@ async function markParticipantAsPaid(phoneNumber) {
 
 module.exports = {
     processCommand,
-    markParticipantAsPaid
+    markParticipantAsPaid,
+    addParticipant,
+    startCircle,
+    initiatePayment,
+    getStatus,
+    isDBAvailable
 };
