@@ -1,12 +1,14 @@
 const { WhatsAppBot } = require('@green-api/whatsapp-chatbot-js-v2');
 const roscaManager = require('./roscaManager');
 const aiService = require('./aiService');
+const PostgresStorage = require('./postgresStorage');
 require('dotenv').config();
 
 const bot = new WhatsAppBot({
     idInstance: process.env.GREEN_API_INSTANCE_ID,
     apiTokenInstance: process.env.GREEN_API_API_TOKEN,
-    defaultState: 'menu'
+    defaultState: 'menu',
+    storage: new PostgresStorage()
 });
 
 // Helper to get phone from chatId (12345@c.us -> 12345)

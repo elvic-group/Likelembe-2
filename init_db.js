@@ -23,6 +23,14 @@ async function initDB() {
                 cycle_id INTEGER REFERENCES rosca_cycles(id)
             );
         `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS bot_sessions (
+                chat_id VARCHAR(255) PRIMARY KEY,
+                data JSONB,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
         
         // Create a default cycle if none exists
         const res = await db.query('SELECT * FROM rosca_cycles LIMIT 1');
