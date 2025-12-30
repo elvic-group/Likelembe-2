@@ -157,6 +157,9 @@ const payState = {
         await bot.sendText(message.chatId, res);
         
         return 'menu';
+    },
+    async onMessage(message) {
+        return 'menu';
     }
 };
 
@@ -167,7 +170,7 @@ const createGroupState = {
         await bot.sendText(message.chatId, "📝 What should we name the new circle? (e.g., Family Savings)");
     },
     async onMessage(message, data = {}) {
-        const groupName = message.text.trim();
+        const groupName = message.text ? message.text.trim() : "";
         if (groupName.length < 3) {
             await bot.sendText(message.chatId, "⚠️ Name too short. Try again.");
             return null;
