@@ -1,76 +1,55 @@
-# Likelembe 2 - ROSCA WhatsApp Bot
+# Likelembe 2: Money Rotation Bot (ROSCA)
 
-## Project Overview
-This project is a WhatsApp-based **ROSCA (Rotating Savings and Credit Association)** bot named "Likelembe". It automates the management of money rotation circles, allowing users to join, contribute, and receive funds via WhatsApp.
+A professional WhatsApp-based ROSCA (Money Rotation) bot integrated with ChatGPT for assistance and Stripe for real payments.
 
-## Architecture & Tech Stack
+## 🚀 Live Status
+- **Backend (Vercel):** [https://likelembe-2.vercel.app](https://likelembe-2.vercel.app)
+- **Dashboard:** [https://likelembe-2.vercel.app/dashboard](https://likelembe-2.vercel.app/dashboard)
+- **Health Check:** [https://likelembe-2.vercel.app/api/health](https://likelembe-2.vercel.app/api/health)
 
-*   **Runtime**: Node.js with Express.js
-*   **Messaging**: [Green API](https://green-api.com/) (WhatsApp integration)
-*   **AI Assistant**: OpenAI (ChatGPT) for handling natural language queries and fallback responses.
-*   **Database**: Neon (Serverless PostgreSQL) for persisting participants, cycles, and payment status. Includes a memory fallback if DB is unreachable.
-*   **Payments**: Stripe (Checkout Sessions) for collecting contributions.
-*   **Deployment**: Vercel (Serverless Functions).
-*   **Dashboard**: [https://likelembe-2.vercel.app/dashboard](https://likelembe-2.vercel.app/dashboard)
+## 🛠 Tech Stack
+- **Engine:** Node.js (Express)
+- **WhatsApp:** [Green API](https://green-api.com/)
+- **AI:** OpenAI (GPT-4o)
+- **Payments:** Stripe
+- **Database:** Neon (PostgreSQL)
+- **Infrastructure:** Vercel
 
-## Key Features
+## 📖 Features
+- **Join/Create Groups:** Multi-group support via WhatsApp groups.
+- **AI Assistant:** Responds to user queries naturally using ChatGPT.
+- **Secure Payments:** Generates Stripe Checkout links for contributions.
+- **Automated Payouts:** Express Stripe accounts for winners (Admin triggered).
+- **Reminders:** Daily CRON endpoint to nudge pending participants.
+- **Hardened Security:** SSL enforced, fail-fast configuration, and safe text handling.
 
-1.  **Commands**:
-    *   `join [name]`: Add a participant to the pending cycle.
-    *   `start`: Begin the cycle (requires >= 2 participants). Notifies the first recipient.
-    *   `pay`: Generates a Stripe payment link for the current round.
-    *   `status`: View cycle progress, current pot, and payment status.
-2.  **AI Fallback**: If a user sends a message that isn't a command, ChatGPT replies as a helpful assistant.
-3.  **Persistence**: Data is stored in Postgres. If the database connection fails, the bot seamlessly switches to in-memory storage (data lost on restart).
+## ⚙️ Operational Setup
 
-## File Structure
+### 1. Webhooks
+- **Green API:** Point to `https://likelembe-2.vercel.app/webhook`.
+- **Stripe:** Point to `https://likelembe-2.vercel.app/stripe-webhook` (event: `checkout.session.completed`).
 
-*   `index.js`: Entry point. Sets up the Express server and routes the Green API webhook (`/webhook`) to either the ROSCA manager or AI service.
-*   `services/`
-    *   `roscaManager.js`: Core business logic (managing state, rotation, payments).
-    *   `whatsappService.js`: Wrapper for Green API to send messages.
-    *   `aiService.js`: Wrapper for OpenAI API.
-    *   `stripeService.js`: Generates Stripe Checkout links.
-    *   `db.js`: Manages connection to Neon PostgreSQL.
-*   `init_db.js`: Script to initialize database tables (`participants`, `rosca_cycles`).
-*   `vercel.json`: Configuration for deploying to Vercel.
+### 2. CRON Job
+Set a daily CRON task to hit:
+`GET https://likelembe-2.vercel.app/api/cron/reminders`
+**Header:** `Authorization: Bearer [CRON_SECRET]`
 
-## Setup & Configuration
+### 3. Required Environment Variables (Vercel)
+- `GREEN_API_INSTANCE_ID`
+- `GREEN_API_API_TOKEN`
+- `OPENAI_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `DATABASE_URL` (Neon)
+- `CRON_SECRET`
 
-### Environment Variables (.env)
-The following variables are required:
-```env
-PORT=3000
-WEBHOOK_URL_BASE=https://your-app.vercel.app
+## 👨‍💻 Commands
+- **join [Name]** - Join the current rotation circle.
+- **pay** - Receive a payment link for the current round.
+- **status** - Check your group standing and total pot.
+- **setup** - Link your bank account via Stripe for payouts.
+- **start** - (Admin) Begin the money rotation cycle.
+- **payout** - (Admin) Trigger the transfer to the current winner.
 
-# Green API (WhatsApp)
-GREEN_API_ID_INSTANCE=...
-GREEN_API_API_TOKEN_INSTANCE=...
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PUBLISHABLE_KEY=pk_live_...
-
-# Neon DB
-DATABASE_URL=postgres://user:pass@host/db...
-NEON_API_KEY=...
-```
-
-### Installation
-1.  `npm install`
-2.  Set up `.env`.
-3.  Run `node init_db.js` to create tables.
-4.  Run `node index.js` to start locally.
-
-## Deployment Status (as of Dec 29, 2025)
-
-*   **Vercel URL**: `https://likelembe-2.vercel.app`
-    *   *Note*: Environment variables must be added manually in Vercel Dashboard.
-*   **GitHub Repo**: `https://github.com/elvic-group/Likelembe-2`
-*   **Green API Webhook**: Needs to be set to `https://likelembe-2.vercel.app/webhook`.
-
-## Local Tools (Gemini CLI)
-*   **MCP Configured**: Vercel and GitHub MCP servers have been added to `~/.gemini/antigravity/mcp_config.json`. Restart Gemini CLI to use them.
+---
+*Created by Gemini CLI*
