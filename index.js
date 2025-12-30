@@ -13,7 +13,7 @@ console.log("🚀 Server starting...");
 console.log("Config Check:", {
     instanceId: !!process.env.GREEN_API_INSTANCE_ID,
     apiToken: !!process.env.GREEN_API_API_TOKEN,
-    dbUrl: !!process.env.DATABASE_URL,
+    dbUrl: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + "..." : "MISSING",
     stripe: !!process.env.STRIPE_SECRET_KEY,
     openai: !!process.env.OPENAI_API_KEY
 });
@@ -107,6 +107,17 @@ app.get('/api/dashboard', async (req, res) => {
     }
 });
 // -----------------
+
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        time: new Date(),
+        config: {
+            instanceId: !!process.env.GREEN_API_INSTANCE_ID,
+            db: !!process.env.DATABASE_URL
+        }
+    });
+});
 
 app.get('/', (req, res) => {
     res.send('ROSCA WhatsApp Bot + AI is running!');
