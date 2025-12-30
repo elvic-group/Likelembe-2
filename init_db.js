@@ -4,6 +4,27 @@ async function initDB() {
     try {
         console.log("Initializing database schema...");
         
+        // 1. Create Groups Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS groups (
+                id SERIAL PRIMARY KEY,
+                whatsapp_id VARCHAR(100) UNIQUE NOT NULL,
+                name VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 2. Create Default Group for legacy data
+        await db.query(`
+            INSERT INTO groups (whatsapp_id, name) 
+            VALUES ('default', 'Default Circle') 
+            ON CONFLICT (whatsapp_id) DO NOTHING;
+        `);
+
+        const defaultGroupRes = await db.query("SELECT id FROM groups WHERE whatsapp_id = 'default'");
+        const defaultGroupId = defaultGroupRes.rows[0].id;
+
+        // 3. Create Cycles Table
         await db.query(`
             CREATE TABLE IF NOT EXISTS rosca_cycles (
                 id SERIAL PRIMARY KEY,
@@ -14,15 +35,59 @@ async function initDB() {
             );
         `);
 
+        // 4. Add group_id to rosca_cycles safely
+        try {
+            await db.query("ALTER TABLE rosca_cycles ADD COLUMN group_id INTEGER REFERENCES groups(id)");
+            console.log("Added group_id column to rosca_cycles.");
+        } catch (e) {
+            // Ignore error if column exists
+        }
+
+        // 5. Backfill legacy cycles
+        await db.query("UPDATE rosca_cycles SET group_id = $1 WHERE group_id IS NULL", [defaultGroupId]);
+
         await db.query(`
             CREATE TABLE IF NOT EXISTS participants (
                 id SERIAL PRIMARY KEY,
-                phone_number VARCHAR(20) UNIQUE NOT NULL,
+                phone_number VARCHAR(20) NOT NULL,
                 name VARCHAR(100),
                 has_paid BOOLEAN DEFAULT FALSE,
-                cycle_id INTEGER REFERENCES rosca_cycles(id)
+                cycle_id INTEGER REFERENCES rosca_cycles(id),
+                UNIQUE(phone_number, cycle_id)
             );
         `);
+
+        // Add stripe_account_id for Payouts
+        try {
+            await db.query("ALTER TABLE participants ADD COLUMN stripe_account_id VARCHAR(100)");
+            console.log("Added stripe_account_id to participants.");
+        } catch (e) {
+            // Ignore if exists
+        }
+
+        // Add email for Notifications
+        try {
+            await db.query("ALTER TABLE participants ADD COLUMN email VARCHAR(100)");
+            console.log("Added email to participants.");
+        } catch (e) {
+            // Ignore if exists
+        }
+
+        // Add currency for Multi-Currency
+        try {
+            await db.query("ALTER TABLE rosca_cycles ADD COLUMN currency VARCHAR(3) DEFAULT 'USD'");
+            console.log("Added currency to rosca_cycles.");
+        } catch (e) {
+            // Ignore if exists
+        }
+
+        // Add default_currency to groups
+        try {
+            await db.query("ALTER TABLE groups ADD COLUMN default_currency VARCHAR(3) DEFAULT 'USD'");
+            console.log("Added default_currency to groups.");
+        } catch (e) {
+            // Ignore if exists
+        }
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS bot_sessions (
@@ -32,13 +97,6 @@ async function initDB() {
             );
         `);
         
-        // Create a default cycle if none exists
-        const res = await db.query('SELECT * FROM rosca_cycles LIMIT 1');
-        if (res.rows.length === 0) {
-            await db.query("INSERT INTO rosca_cycles (status) VALUES ('pending')");
-            console.log("Created default ROSCA cycle.");
-        }
-
         console.log("Database schema initialized.");
         process.exit(0);
     } catch (err) {

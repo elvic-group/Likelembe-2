@@ -1,6 +1,7 @@
 const whatsappService = require('./whatsappService');
 const stripeService = require('./stripeService');
 const db = require('./db');
+const emailService = require('./emailService');
 
 // In-memory state (fallback)
 const roscaState = {
@@ -11,115 +12,167 @@ const roscaState = {
     potTotal: 0
 };
 
-async function processCommand(phoneNumber, text, senderName = 'Friend') {
-    const cleanText = text.trim().toLowerCase();
+async function getGroupId(chatId) {
+    if (!await isDBAvailable()) return null; 
     
-    if (cleanText === 'status') {
-        return await getStatus(phoneNumber);
-    } else if (cleanText.startsWith('join ')) {
-        const name = text.substring(5).trim();
-        return await addParticipant(phoneNumber, name);
-    } else if (cleanText === 'pay') {
-        return await initiatePayment(phoneNumber, senderName);
-    } else if (cleanText === 'start') {
-        return await startCircle(phoneNumber);
+    const whatsappId = chatId && chatId.endsWith('@g.us') ? chatId : 'default';
+    
+    let res = await db.query("SELECT id FROM groups WHERE whatsapp_id = $1", [whatsappId]);
+    if (res.rows.length > 0) return res.rows[0].id;
+    
+    if (whatsappId !== 'default') {
+        const ins = await db.query("INSERT INTO groups (whatsapp_id, name, default_currency) VALUES ($1, 'New Group', 'USD') RETURNING id", [whatsappId]);
+        await emailService.sendAdminAlert("New Group Created", `Group ID: ${chatId}`);
+        return ins.rows[0].id;
     }
-    
     return null;
 }
 
-// Helper to check DB health
-async function isDBAvailable() {
-    try {
-        await db.query('SELECT 1');
-        return true;
-    } catch (e) {
-        return false;
-    }
+async function registerGroup(chatId, name, currency = 'USD') {
+    if (!await isDBAvailable()) return;
+    await db.query(`
+        INSERT INTO groups (whatsapp_id, name, default_currency)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (whatsapp_id) 
+        DO UPDATE SET name = $2, default_currency = $3
+    `, [chatId, name, currency]);
 }
 
-async function addParticipant(phoneNumber, name) {
+async function addParticipant(phoneNumber, name, email, chatId) {
     if (await isDBAvailable()) {
+        const groupId = await getGroupId(chatId);
+        if (!groupId) return "❌ System error: Group not found.";
+
         try {
-            // DB Implementation
-            const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE status = 'pending' LIMIT 1");
-            if (cycleRes.rows.length === 0) return "Cycle already started or none exists.";
+            let cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE group_id = $1 AND status = 'pending' LIMIT 1", [groupId]);
+            let cycleId;
+            if (cycleRes.rows.length === 0) {
+                let currency = 'USD';
+                const gRes = await db.query("SELECT default_currency FROM groups WHERE id = $1", [groupId]);
+                if (gRes.rows.length > 0) currency = gRes.rows[0].default_currency || 'USD';
+
+                const newCycle = await db.query(
+                    "INSERT INTO rosca_cycles (status, group_id, currency) VALUES ('pending', $1, $2) RETURNING id", 
+                    [groupId, currency]
+                );
+                cycleId = newCycle.rows[0].id;
+            } else {
+                cycleId = cycleRes.rows[0].id;
+            }
             
-            const cycleId = cycleRes.rows[0].id;
-            
-            // Check existing
             const existRes = await db.query("SELECT * FROM participants WHERE phone_number = $1 AND cycle_id = $2", [phoneNumber, cycleId]);
-            if (existRes.rows.length > 0) return "You are already in the circle.";
+            if (existRes.rows.length > 0) return "⚠️ You are already in the circle.";
             
-            await db.query("INSERT INTO participants (phone_number, name, cycle_id) VALUES ($1, $2, $3)", [phoneNumber, name, cycleId]);
+            await db.query("INSERT INTO participants (phone_number, name, email, cycle_id) VALUES ($1, $2, $3, $4)", [phoneNumber, name, email, cycleId]);
+            
+            if (email) {
+                await emailService.sendEmail(email, name, "Welcome to Likelembe", `Hi ${name}, you have successfully joined the circle!`);
+            }
+            await emailService.sendAdminAlert("New Participant", `${name} (${email || 'No Email'}) joined group ${groupId}`);
             
             const countRes = await db.query("SELECT COUNT(*) FROM participants WHERE cycle_id = $1", [cycleId]);
-            return `Welcome ${name}! Current participants: ${countRes.rows[0].count}`;
+            return `🎉 *Welcome, ${name}!* You have successfully joined.
+👥 Current participants: ${countRes.rows[0].count}`;
         } catch (e) {
             console.error("DB Error:", e);
-            return "System error. Please try again later.";
+            return "❌ System error. Please try again later.";
         }
     } else {
-        // Memory Implementation
-        if (roscaState.cycleStatus !== 'pending') return "Cycle already started. Cannot join now.";
+        if (roscaState.cycleStatus !== 'pending') return "⚠️ Cycle already started. Cannot join now.";
         const existing = roscaState.participants.find(p => p.phoneNumber === phoneNumber);
-        if (existing) return "You are already in the circle.";
-        roscaState.participants.push({ phoneNumber, name, hasPaid: false });
-        return `Welcome ${name}! Current participants: ${roscaState.participants.length} (Offline Mode)`;
+        if (existing) return "⚠️ You are already in the circle.";
+        roscaState.participants.push({ phoneNumber, name, email, hasPaid: false });
+        return `🎉 *Welcome, ${name}!* (Offline Mode)`;
     }
 }
 
-async function startCircle(phoneNumber) {
+async function startCircle(phoneNumber, chatId) {
     if (await isDBAvailable()) {
-        // Simplified DB Start Logic
-        const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE status = 'pending' LIMIT 1");
-        if (cycleRes.rows.length === 0) return "No pending cycle.";
+        const groupId = await getGroupId(chatId);
+        
+        const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE group_id = $1 AND status = 'pending' LIMIT 1", [groupId]);
+        if (cycleRes.rows.length === 0) return "⚠️ No pending cycle for this group.";
         
         const participantsRes = await db.query("SELECT * FROM participants WHERE cycle_id = $1", [cycleRes.rows[0].id]);
-        if (participantsRes.rows.length < 2) return "Need at least 2 participants.";
+        if (participantsRes.rows.length < 2) return "⚠️ Need at least 2 participants to start.";
         
         await db.query("UPDATE rosca_cycles SET status = 'active' WHERE id = $1", [cycleRes.rows[0].id]);
         
-        // Notify
         const recipient = participantsRes.rows[0];
         for (const p of participantsRes.rows) {
              whatsappService.sendMessage(p.phone_number, 
-                `ROSCA Cycle Started!\nFirst recipient: ${recipient.name}`
+                `🚀 *The Cycle Has Begun!* 🌍\n\n` +
+                `The first pot will go to: *${recipient.name}* 🏆\n` +
+                `Good luck to everyone!`
             ).catch(console.error);
         }
-        return "Cycle started!";
+        return "✅ Cycle started successfully!";
     } else {
-        if (roscaState.participants.length < 2) return "Need at least 2 participants.";
+        if (roscaState.participants.length < 2) return "⚠️ Need at least 2 participants.";
         roscaState.cycleStatus = 'active';
         roscaState.currentRecipientIndex = 0;
         const recipient = roscaState.participants[0];
         for (const p of roscaState.participants) {
-            whatsappService.sendMessage(p.phoneNumber, 
-                `ROSCA Cycle Started!\nFirst recipient: ${recipient.name}`
-            ).catch(console.error);
+            whatsappService.sendMessage(p.phoneNumber, "Cycle Started (Offline)").catch(console.error);
         }
         return "Cycle started (Offline Mode).";
     }
 }
 
-async function initiatePayment(phoneNumber, name) {
-    // Generate Stripe Link
-    const amount = 100; // Hardcoded or fetch from state/DB
-    const link = await stripeService.createPaymentLink(amount, name, phoneNumber);
+async function initiatePayment(phoneNumber, name, chatId) {
+    const groupId = await getGroupId(chatId);
+    let currency = 'usd';
+    
+    if (await isDBAvailable() && groupId) {
+        const cRes = await db.query(`
+            SELECT c.currency FROM rosca_cycles c
+            JOIN participants p ON p.cycle_id = c.id
+            WHERE p.phone_number = $1 AND c.group_id = $2
+            ORDER BY c.id DESC LIMIT 1
+        `, [phoneNumber, groupId]);
+        if (cRes.rows.length > 0) currency = cRes.rows[0].currency || 'usd';
+    }
+
+    const amount = 100; 
+    const link = await stripeService.createPaymentLink(amount, name, phoneNumber, currency);
     
     if (link) {
-        return `Please complete your contribution here: ${link}`;
+        return `💳 *Time to Contribute!*
+
+` +
+               `Click the link below to pay your *${amount} ${currency.toUpperCase()}*:
+` +
+               `${link}
+
+` +
+               `_Secure payment via Stripe_`;
     } else {
-        return "Error creating payment link. Try again later.";
+        return "❌ Error creating payment link. Try again later.";
     }
 }
 
-async function getStatus(phoneNumber) {
-    // Simplified status
+async function getStatus(phoneNumber, chatId) {
     if (await isDBAvailable()) {
-         const pRes = await db.query("SELECT * FROM participants WHERE phone_number = $1", [phoneNumber]);
-         if (pRes.rows.length === 0) return "Not in a circle.";
-         return `You are in the circle. Status: Active (DB)`;
+        const groupId = await getGroupId(chatId);
+        
+         const pRes = await db.query(`
+            SELECT p.*, c.status as cycle_status, c.currency, c.pot_total 
+            FROM participants p
+            JOIN rosca_cycles c ON p.cycle_id = c.id
+            WHERE p.phone_number = $1 AND c.group_id = $2
+            ORDER BY c.id DESC LIMIT 1
+         `, [phoneNumber, groupId]);
+         
+         if (pRes.rows.length === 0) return "⚠️ You are not in a circle in this group.";
+         const p = pRes.rows[0];
+         return `📊 *Your Status*
+
+` +
+                `🔄 Cycle: *${p.cycle_status.toUpperCase()}*
+` +
+                `💰 Pot: *${p.pot_total} ${p.currency}*
+` +
+                `✅ Payment: *${p.has_paid ? 'PAID' : 'PENDING'}*`;
     }
     const p = roscaState.participants.find(p => p.phoneNumber === phoneNumber);
     if (!p) return "You are not in a circle.";
@@ -131,14 +184,29 @@ async function markParticipantAsPaid(phoneNumber) {
     
     if (await isDBAvailable()) {
         try {
-            // Assuming there's a 'has_paid' column or similar tracking mechanism
-            // For this MVP, we might need to add a transaction record or update a flag
-            // Let's assume a simple update for the current active/pending cycle
-            const updateRes = await db.query(
-                "UPDATE participants SET has_paid = true WHERE phone_number = $1", 
-                [phoneNumber]
-            );
-            return updateRes.rowCount > 0;
+            // Find participant and update, joining with cycle to get currency and amount
+            const updateRes = await db.query(`
+                UPDATE participants p
+                SET has_paid = true 
+                FROM rosca_cycles c
+                WHERE p.cycle_id = c.id 
+                  AND p.phone_number = $1 
+                  AND p.has_paid = false 
+                RETURNING p.name, p.email, c.currency, c.contribution_amount
+            `, [phoneNumber]);
+            
+            if (updateRes.rows.length > 0) {
+                const p = updateRes.rows[0];
+                const amountStr = `${p.contribution_amount} ${p.currency.toUpperCase()}`;
+                
+                // Send Receipts
+                if (p.email) {
+                    await emailService.sendEmail(p.email, p.name, "Payment Receipt", `We received your contribution of ${amountStr}. Thank you!`);
+                }
+                await emailService.sendAdminAlert("Payment Received", `${p.name} paid ${amountStr}.`);
+                return true;
+            }
+            return false;
         } catch (e) {
             console.error("DB Error updating payment:", e);
             return false;
@@ -148,8 +216,6 @@ async function markParticipantAsPaid(phoneNumber) {
         const participant = roscaState.participants.find(p => p.phoneNumber === phoneNumber);
         if (participant) {
             participant.hasPaid = true;
-            // Add to pot
-            roscaState.potTotal += roscaState.contributionAmount;
             return true;
         }
         return false;
@@ -174,7 +240,6 @@ async function getDashboardData() {
             console.error("DB Dashboard Error:", e);
         }
     } else {
-        // Fallback
         data.cycle.status = roscaState.cycleStatus;
         data.cycle.pot_total = roscaState.potTotal;
         data.participants = roscaState.participants.map(p => ({
@@ -191,13 +256,10 @@ async function sendReminders() {
     let count = 0;
     
     if (await isDBAvailable()) {
-        // DB Logic
         try {
-            // Get active cycle
             const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE status = 'active' LIMIT 1");
             if (cycleRes.rows.length === 0) return "No active cycle.";
             
-            // Get unpaid participants
             const res = await db.query(
                 "SELECT * FROM participants WHERE cycle_id = $1 AND has_paid = false", 
                 [cycleRes.rows[0].id]
@@ -205,7 +267,10 @@ async function sendReminders() {
             
             for (const p of res.rows) {
                 await whatsappService.sendMessage(p.phone_number, 
-                    `🔔 *Reminder*: Please make your contribution for this week's cycle.\nType *pay* to get the link.`
+                    `⏳ *Weekly Reminder*\n\n` +
+                    `Don't forget to make your contribution! The circle relies on you.
+` +
+                    `Type *pay* to get your link.`
                 );
                 count++;
             }
@@ -213,20 +278,119 @@ async function sendReminders() {
             console.error("Error sending reminders (DB):", e);
             return "Error sending reminders.";
         }
-    } else {
-        // Memory Logic
-        if (roscaState.cycleStatus !== 'active') return "No active cycle.";
-        
-        for (const p of roscaState.participants) {
-            if (!p.hasPaid) {
-                await whatsappService.sendMessage(p.phoneNumber, 
-                    `🔔 *Reminder*: Please make your contribution for this week's cycle.\nType *pay* to get the link.`
-                );
-                count++;
-            }
-        }
-    }
+    } 
     return `Sent ${count} reminders.`;
+}
+
+async function setupPayout(phoneNumber, chatId) {
+    if (!await isDBAvailable()) return "Feature not available in offline mode.";
+    
+    const groupId = await getGroupId(chatId);
+    
+    const pRes = await db.query(`
+        SELECT p.* FROM participants p
+        JOIN rosca_cycles c ON p.cycle_id = c.id
+        WHERE p.phone_number = $1 AND c.group_id = $2
+        ORDER BY c.id DESC LIMIT 1
+    `, [phoneNumber, groupId]);
+    
+    if (pRes.rows.length === 0) return "⚠️ You are not in a circle.";
+    const p = pRes.rows[0];
+    
+    if (p.stripe_account_id) {
+        return "✅ You are already set up for payouts!";
+    }
+    
+    const accountId = await stripeService.createExpressAccount();
+    if (!accountId) return "❌ Error creating Stripe account.";
+    
+    await db.query("UPDATE participants SET stripe_account_id = $1 WHERE id = $2", [accountId, p.id]);
+    
+    const link = await stripeService.createAccountLink(accountId);
+    if (!link) return "❌ Error creating onboarding link.";
+    
+    return `🏦 *Setup Payouts*
+
+Tap here to link your Bank/Debit Card securely:
+${link}`;
+}
+
+async function payoutWinner(chatId) {
+    if (!await isDBAvailable()) return "Offline mode.";
+    const groupId = await getGroupId(chatId);
+    
+    const cycleRes = await db.query("SELECT * FROM rosca_cycles WHERE group_id = $1 AND status = 'active' LIMIT 1", [groupId]);
+    if (cycleRes.rows.length === 0) return "⚠️ No active cycle.";
+    
+    const cycle = cycleRes.rows[0];
+    if (Number(cycle.pot_total) <= 0) return "⚠️ Pot is empty.";
+    
+    const participantsRes = await db.query("SELECT * FROM participants WHERE cycle_id = $1 ORDER BY id ASC", [cycle.id]);
+    const recipient = participantsRes.rows[cycle.current_recipient_index]; 
+    
+    if (!recipient) return "❌ No recipient found.";
+    
+    if (!recipient.stripe_account_id) {
+        return `⚠️ Cannot payout. *${recipient.name}* needs to run 'setup' first.`;
+    }
+    
+    try {
+        await stripeService.transferFunds(recipient.stripe_account_id, Number(cycle.pot_total), cycle.currency || 'usd');
+        
+        await db.query("UPDATE rosca_cycles SET pot_total = 0 WHERE id = $1", [cycle.id]);
+        
+        const nextIndex = (cycle.current_recipient_index + 1) % participantsRes.rows.length;
+        await db.query("UPDATE rosca_cycles SET current_recipient_index = $1 WHERE id = $2", [nextIndex, cycle.id]);
+        
+        // Notify Winner via Email
+        if (recipient.email) {
+            const amountStr = `${cycle.pot_total} ${cycle.currency.toUpperCase()}`;
+            await emailService.sendEmail(recipient.email, recipient.name, "Payout Sent!", `Congratulations! We have sent ${amountStr} to your Stripe account.`);
+        }
+        await emailService.sendAdminAlert("Payout Triggered", `${cycle.pot_total} ${cycle.currency} sent to ${recipient.name}`);
+
+        return `💰 *Payout Complete!*
+
+` +
+               `*${cycle.pot_total} ${cycle.currency.toUpperCase()}* has been sent to *${recipient.name}*.
+` +
+               `Next up: *${participantsRes.rows[nextIndex].name}*!`;
+    } catch (e) {
+        console.error("Payout Failed:", e);
+        return "❌ Payout failed. Check logs.";
+    }
+}
+
+async function processCommand(phoneNumber, text, senderName = 'Friend', chatId) {
+    const cleanText = text.trim().toLowerCase();
+    
+    if (cleanText === 'status') {
+        return await getStatus(phoneNumber, chatId);
+    } else if (cleanText.startsWith('join ')) {
+        const name = text.substring(5).trim();
+        // Text-based join doesn't ask for email yet
+        return await addParticipant(phoneNumber, name, null, chatId);
+    } else if (cleanText === 'pay') {
+        return await initiatePayment(phoneNumber, senderName, chatId);
+    } else if (cleanText === 'start') {
+        return await startCircle(phoneNumber, chatId);
+    } else if (cleanText === 'setup') {
+        return await setupPayout(phoneNumber, chatId);
+    } else if (cleanText === 'payout') {
+        return await payoutWinner(chatId);
+    }
+    
+    return null;
+}
+
+// Helper to check DB health
+async function isDBAvailable() {
+    try {
+        await db.query('SELECT 1');
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 module.exports = {
@@ -238,5 +402,8 @@ module.exports = {
     getStatus,
     isDBAvailable,
     getDashboardData,
-    sendReminders
+    sendReminders,
+    setupPayout,
+    payoutWinner,
+    registerGroup
 };
