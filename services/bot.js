@@ -5,12 +5,14 @@ const emailService = require('./emailService');
 const PostgresStorage = require('./postgresStorage');
 require('dotenv').config();
 
+console.log("[BOT] Instantiating WhatsAppBot with ID:", process.env.GREEN_API_INSTANCE_ID);
 const bot = new WhatsAppBot({
     idInstance: String(process.env.GREEN_API_INSTANCE_ID),
     apiTokenInstance: String(process.env.GREEN_API_API_TOKEN),
     defaultState: 'menu',
     storage: new PostgresStorage()
 });
+console.log("[BOT] Bot instantiated successfully");
 
 // Helper to get phone from chatId (12345@c.us -> 12345)
 const getPhone = (chatId) => chatId.split('@')[0];

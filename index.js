@@ -65,11 +65,10 @@ app.post('/webhook', async (req, res) => {
     try {
         console.log("📥 Incoming Webhook:", JSON.stringify(req.body, null, 2));
         // Delegate incoming Green API webhooks to the Chatbot SDK
-        // The SDK expects an object with a 'body' property
         await bot.handleNotification({ body: req.body });
         res.status(200).send('OK');
     } catch (error) {
-        console.error('Error processing webhook:', error);
+        console.error("❌ Webhook Error Stack:", error.stack);
         res.status(500).send('Error');
     }
 });
