@@ -19,6 +19,7 @@ const getPhone = (chatId) => chatId.split('@')[0];
 const menuState = {
     name: 'menu',
     async onEnter(message) {
+        console.log(`[BOT] Entering menu for ${message.chatId}`);
         await bot.sendText(message.chatId, 
             "👋 *Welcome to Likelembe!* 🌍\n" +
             "_Your Trusted Money Rotation Circle_\n\n" +

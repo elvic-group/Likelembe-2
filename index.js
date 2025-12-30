@@ -63,6 +63,7 @@ app.use(bodyParser.json());
 // Webhook endpoint for Green API
 app.post('/webhook', async (req, res) => {
     try {
+        console.log("📥 Incoming Webhook:", JSON.stringify(req.body, null, 2));
         // Delegate incoming Green API webhooks to the Chatbot SDK
         // The SDK expects a notification object with a 'body' property
         await bot.handleNotification({ body: req.body });
