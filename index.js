@@ -11,11 +11,9 @@ const PORT = process.env.PORT || 3000;
 
 console.log("🚀 Server starting...");
 console.log("Config Check:", {
-    instanceId: !!process.env.GREEN_API_INSTANCE_ID,
-    apiToken: !!process.env.GREEN_API_API_TOKEN,
-    dbUrl: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + "..." : "MISSING",
-    stripe: !!process.env.STRIPE_SECRET_KEY,
-    openai: !!process.env.OPENAI_API_KEY
+    instanceId: process.env.GREEN_API_INSTANCE_ID ? process.env.GREEN_API_INSTANCE_ID.substring(0, 4) + "..." : "MISSING",
+    apiToken: process.env.GREEN_API_API_TOKEN ? "PRESENT" : "MISSING",
+    dbUrl: process.env.DATABASE_URL ? "PRESENT" : "MISSING"
 });
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
