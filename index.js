@@ -4,6 +4,7 @@ require('dotenv').config();
 const roscaManager = require('./services/roscaManager');
 const whatsappService = require('./services/whatsappService');
 const bot = require('./services/bot');
+const db = require('./services/db');
 const Stripe = require('stripe');
 
 const app = express();
