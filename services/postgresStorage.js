@@ -37,6 +37,7 @@ class PostgresStorage {
     }
 
     async set(chatId, data) {
+        if (!chatId) return; // Prevent crash on invalid notifications
         await this.ensureTable();
         try {
             await db.query(`

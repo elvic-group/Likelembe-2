@@ -8,6 +8,16 @@ const Stripe = require('stripe');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+console.log("🚀 Server starting...");
+console.log("Config Check:", {
+    instanceId: !!process.env.GREEN_API_INSTANCE_ID,
+    apiToken: !!process.env.GREEN_API_API_TOKEN,
+    dbUrl: !!process.env.DATABASE_URL,
+    stripe: !!process.env.STRIPE_SECRET_KEY,
+    openai: !!process.env.OPENAI_API_KEY
+});
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // --- STRIPE WEBHOOK (Must be before bodyParser.json) ---
