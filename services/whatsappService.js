@@ -2,8 +2,8 @@ const whatsAppClient = require('@green-api/whatsapp-api-client');
 require('dotenv').config();
 
 const restAPI = whatsAppClient.restAPI({
-    idInstance: process.env.GREEN_API_ID_INSTANCE,
-    apiTokenInstance: process.env.GREEN_API_API_TOKEN_INSTANCE
+    idInstance: String(process.env.GREEN_API_INSTANCE_ID),
+    apiTokenInstance: String(process.env.GREEN_API_API_TOKEN)
 });
 
 async function sendMessage(phoneNumber, message) {

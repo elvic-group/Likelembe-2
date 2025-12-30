@@ -6,8 +6,8 @@ const PostgresStorage = require('./postgresStorage');
 require('dotenv').config();
 
 const bot = new WhatsAppBot({
-    idInstance: process.env.GREEN_API_INSTANCE_ID,
-    apiTokenInstance: process.env.GREEN_API_API_TOKEN,
+    idInstance: String(process.env.GREEN_API_INSTANCE_ID),
+    apiTokenInstance: String(process.env.GREEN_API_API_TOKEN),
     defaultState: 'menu',
     storage: new PostgresStorage()
 });

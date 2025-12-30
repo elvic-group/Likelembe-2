@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const ID_INSTANCE = process.env.GREEN_API_ID_INSTANCE || process.env.GREEN_API_INSTANCE_ID;
 const API_TOKEN = process.env.GREEN_API_API_TOKEN_INSTANCE || process.env.GREEN_API_API_TOKEN;
-const WEBHOOK_URL = 'https://likelembe-2.vercel.app/webhook';
+const WEBHOOK_URL = 'https://likelembe.b-cdn.net/webhook';
 
 if (!ID_INSTANCE || !API_TOKEN) {
     console.error('❌ Error: Missing Green API credentials in .env');
