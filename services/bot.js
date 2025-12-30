@@ -17,13 +17,24 @@ const bot = new WhatsAppBot({
     storage: new PostgresStorage()
 });
 
-// Helper to get phone from chatId (12345@c.us -> 12345)
+// Helpers
 const getPhone = (chatId) => chatId.split('@')[0];
+
+const handleEscapeHatch = async (message) => {
+    const text = message.text ? message.text.trim().toLowerCase() : "";
+    if (text === 'menu' || text === 'cancel' || text === '/reset' || text === '/menu' || text === 'exit') {
+        console.log(`[BOT] Resetting session for ${message.chatId}`);
+        await bot.storage.clearSession(message.chatId);
+        return true;
+    }
+    return false;
+};
 
 // 1. Menu State
 const menuState = {
     name: 'menu',
     async onEnter(message) {
+        console.log(`[BOT] Menu Enter: ${message.chatId}`);
         await bot.sendText(message.chatId, 
             "👋 *Welcome to Likelembe!* 🌍\n" +
             "_Your Trusted Money Rotation Circle_\n\n" +
@@ -40,22 +51,13 @@ const menuState = {
         );
     },
     async onMessage(message) {
+        console.log(`[BOT] Menu Message: ${message.chatId} - \"${message.text}\"`);
+        if (await handleEscapeHatch(message)) return 'menu';
+
         const text = message.text ? message.text.trim() : "";
         const phone = getPhone(message.chatId);
         
-        // Global Escape Hatch
-        const lowerText = text.toLowerCase();
-        if (lowerText === '/reset' || lowerText === '/menu' || lowerText === 'menu' || lowerText === 'cancel') {
-            try {
-                await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-                console.log(`[BOT] Session cleared for ${message.chatId}`);
-            } catch (e) {
-                console.error("[BOT] Failed to clear session:", e.message);
-            }
-            return 'menu';
-        }
-        
-        if (text === '1' || lowerText.includes('join')) {
+        if (text === '1' || text.toLowerCase().includes('join')) {
             return 'join_ask_name';
         }
         if (text === '2' || text.toLowerCase().includes('pay')) {
@@ -64,7 +66,7 @@ const menuState = {
         if (text === '3' || text.toLowerCase().includes('status')) {
             const status = await roscaManager.getStatus(phone, message.chatId);
             await bot.sendText(message.chatId, status);
-            return null; // Stay in menu
+            return null;
         }
         if (text === '4' || text.toLowerCase().includes('start')) {
              const res = await roscaManager.startCircle(phone, message.chatId);
@@ -85,7 +87,7 @@ const menuState = {
             return null;
         }
 
-        // AI Fallback for non-commands
+        // AI Fallback
         try {
             const aiResponse = await aiService.getChatResponse(text);
             await bot.sendText(message.chatId, aiResponse);
@@ -101,14 +103,8 @@ const menuState = {
 const joinState = {
     name: 'join_ask_name',
     async onMessage(message, data = {}) {
-        const text = message.text ? message.text.trim() : "";
-        const lowerText = text.toLowerCase();
-        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
-            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-            return 'menu';
-        }
-        
-        const name = text;
+        if (await handleEscapeHatch(message)) return 'menu';
+        const name = message.text ? message.text.trim() : "";
         
         if (name.length < 2) {
             await bot.sendText(message.chatId, "⚠️ That name is too short. Please try again.");
@@ -127,14 +123,8 @@ const joinState = {
 const joinEmailState = {
     name: 'join_ask_email',
     async onMessage(message, data) {
-        const text = message.text ? message.text.trim() : "";
-        const lowerText = text.toLowerCase();
-        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
-            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-            return 'menu';
-        }
-        
-        const email = text;
+        if (await handleEscapeHatch(message)) return 'menu';
+        const email = message.text ? message.text.trim() : "";
 
         if (!email.includes('@')) {
             await bot.sendText(message.chatId, "⚠️ Please enter a valid email address.");
@@ -153,7 +143,7 @@ const joinEmailState = {
             };
         } catch (e) {
             console.error("OTP Email Error:", e);
-            await bot.sendText(message.chatId, "❌ Failed to send email. Please try again or use a different email.");
+            await bot.sendText(message.chatId, "❌ Failed to send email. Please try again.");
             return null;
         }
     }
@@ -162,14 +152,8 @@ const joinEmailState = {
 const joinVerifyState = {
     name: 'join_verify_otp',
     async onMessage(message, data) {
-        const text = message.text ? message.text.trim() : "";
-        const lowerText = text.toLowerCase();
-        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
-            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-            return 'menu';
-        }
-        
-        const input = text;
+        if (await handleEscapeHatch(message)) return 'menu';
+        const input = message.text ? message.text.trim() : "";
         const phone = getPhone(message.chatId);
         
         if (input === data.otp) {
@@ -177,7 +161,7 @@ const joinVerifyState = {
             await bot.sendText(message.chatId, res);
             return 'menu';
         } else {
-            await bot.sendText(message.chatId, "❌ Incorrect code. Please check your email and try again:");
+            await bot.sendText(message.chatId, "❌ Incorrect code. Please check your email or type *menu* to start over.");
             return null; 
         }
     }
@@ -189,12 +173,9 @@ const payState = {
     async onEnter(message) {
         const phone = getPhone(message.chatId);
         const name = message.senderName || "Member";
-        
         await bot.sendText(message.chatId, "💸 Generating your secure payment link...");
-        
         const res = await roscaManager.initiatePayment(phone, name, message.chatId);
         await bot.sendText(message.chatId, res);
-        
         return 'menu';
     },
     async onMessage(message) {
@@ -209,21 +190,13 @@ const createGroupState = {
         await bot.sendText(message.chatId, "📝 What should we name the new circle? (e.g., Family Savings)");
     },
     async onMessage(message, data = {}) {
-        const text = message.text ? message.text.trim() : "";
-        const lowerText = text.toLowerCase();
-        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
-            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-            return 'menu';
-        }
-        
-        const groupName = text;
+        if (await handleEscapeHatch(message)) return 'menu';
+        const groupName = message.text ? message.text.trim() : "";
         if (groupName.length < 3) {
             await bot.sendText(message.chatId, "⚠️ Name too short. Try again.");
             return null;
         }
-        
         await bot.sendText(message.chatId, "💱 Which currency should we use? (USD, EUR, GBP, CAD)");
-        
         return {
             state: 'create_circle_ask_currency',
             data: { ...data, name: groupName }
@@ -234,14 +207,8 @@ const createGroupState = {
 const createCurrencyState = {
     name: 'create_circle_ask_currency',
     async onMessage(message, data) {
-        const text = message.text ? message.text.trim() : "";
-        const lowerText = text.toLowerCase();
-        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
-            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
-            return 'menu';
-        }
-        
-        const currency = text.toUpperCase();
+        if (await handleEscapeHatch(message)) return 'menu';
+        const currency = message.text ? message.text.trim().toUpperCase() : "";
         const validCurrencies = ['USD', 'EUR', 'GBP', 'CAD'];
         
         if (!validCurrencies.includes(currency)) {
@@ -250,29 +217,21 @@ const createCurrencyState = {
         }
 
         try {
-            await bot.sendText(message.chatId, `🔨 Creating "*${data.name}*" (${currency})... Please wait.`);
-            
+            await bot.sendText(message.chatId, `🔨 Creating "*${data.name}*" (${currency})...`);
             const result = await bot.api.group.createGroup(data.name, [message.chatId]);
             
             if (result && result.created) {
-                const newGroupId = result.chatId;
-                await roscaManager.registerGroup(newGroupId, data.name, currency);
-                
-                await bot.sendText(message.chatId, 
-                    "✅ *Circle Created Successfully!*\n\n" +
-                    "📝 Name: *${data.name}*\n" +
-                    "💱 Currency: *${currency}*\n\n" +
-                    "🔗 *Invite Link:* ${result.groupInviteLink}\n\n" +
-                    "_Please join the group and type \"Hi\" to start._"
-                );
+                await roscaManager.registerGroup(result.chatId, data.name, currency);
+                await bot.sendText(message.chatId, `✅ *Circle Created!*
+
+🔗 *Invite Link:* ${result.groupInviteLink}`);
             } else {
-                await bot.sendText(message.chatId, "❌ Failed to create group via WhatsApp API. Please try again later.");
+                await bot.sendText(message.chatId, "❌ Failed to create group.");
             }
         } catch (e) {
             console.error("Create Group Error:", e);
-            await bot.sendText(message.chatId, "❌ Error creating group. Make sure I have permissions.");
+            await bot.sendText(message.chatId, "❌ Error creating group.");
         }
-        
         return 'menu';
     }
 };

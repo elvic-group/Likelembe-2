@@ -49,6 +49,17 @@ class PostgresStorage {
             console.error("[STORAGE] SET error:", e.message);
         }
     }
+
+    async clearSession(chatId) {
+        if (!chatId) return;
+        await this.ensureTable();
+        try {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [chatId]);
+            console.log(`[STORAGE] Session cleared for ${chatId}`);
+        } catch (e) {
+            console.error("[STORAGE] DELETE error:", e.message);
+        }
+    }
 }
 
 module.exports = PostgresStorage;
