@@ -9,13 +9,6 @@ const Stripe = require('stripe');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-console.log("🚀 Server starting...");
-console.log("Config Check:", {
-    instanceId: process.env.GREEN_API_INSTANCE_ID ? process.env.GREEN_API_INSTANCE_ID.substring(0, 4) + "..." : "MISSING",
-    apiToken: process.env.GREEN_API_API_TOKEN ? "PRESENT" : "MISSING",
-    dbUrl: process.env.DATABASE_URL ? "PRESENT" : "MISSING"
-});
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // --- STRIPE WEBHOOK (Must be before bodyParser.json) ---
@@ -61,8 +54,8 @@ app.use(bodyParser.json());
 // Webhook endpoint for Green API
 app.post('/webhook', async (req, res) => {
     try {
-        console.log("📥 Incoming Webhook:", JSON.stringify(req.body, null, 2));
         // Delegate incoming Green API webhooks to the Chatbot SDK
+        // The SDK expects an object with a 'body' property
         await bot.handleNotification({ body: req.body });
         res.status(200).send('OK');
     } catch (error) {
