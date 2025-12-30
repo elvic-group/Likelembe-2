@@ -3,6 +3,7 @@ const roscaManager = require('./roscaManager');
 const aiService = require('./aiService');
 const emailService = require('./emailService');
 const PostgresStorage = require('./postgresStorage');
+const db = require('./db');
 require('dotenv').config();
 
 if (!process.env.GREEN_API_INSTANCE_ID || !process.env.GREEN_API_API_TOKEN) {
@@ -34,7 +35,8 @@ const menuState = {
             "5️⃣ *Create New Circle* (Start a new group)\n" +
             "6️⃣ *Setup Payouts* (Link your bank account)\n" +
             "7️⃣ *Trigger Payout* (Admin: Send money to winner)\n\n" +
-            "_Type a number or ask me anything!_"
+            "_Type a number or ask me anything!_\n\n" +
+            "💡 _Type *menu* anytime to reset._"
         );
     },
     async onMessage(message) {
@@ -42,11 +44,18 @@ const menuState = {
         const phone = getPhone(message.chatId);
         
         // Global Escape Hatch
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel' || text.toLowerCase() === 'exit') {
+        const lowerText = text.toLowerCase();
+        if (lowerText === '/reset' || lowerText === '/menu' || lowerText === 'menu' || lowerText === 'cancel') {
+            try {
+                await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+                console.log(`[BOT] Session cleared for ${message.chatId}`);
+            } catch (e) {
+                console.error("[BOT] Failed to clear session:", e.message);
+            }
             return 'menu';
         }
         
-        if (text === '1' || text.toLowerCase().includes('join')) {
+        if (text === '1' || lowerText.includes('join')) {
             return 'join_ask_name';
         }
         if (text === '2' || text.toLowerCase().includes('pay')) {
@@ -93,7 +102,11 @@ const joinState = {
     name: 'join_ask_name',
     async onMessage(message, data = {}) {
         const text = message.text ? message.text.trim() : "";
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        const lowerText = text.toLowerCase();
+        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+            return 'menu';
+        }
         
         const name = text;
         
@@ -115,7 +128,11 @@ const joinEmailState = {
     name: 'join_ask_email',
     async onMessage(message, data) {
         const text = message.text ? message.text.trim() : "";
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        const lowerText = text.toLowerCase();
+        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+            return 'menu';
+        }
         
         const email = text;
 
@@ -146,7 +163,11 @@ const joinVerifyState = {
     name: 'join_verify_otp',
     async onMessage(message, data) {
         const text = message.text ? message.text.trim() : "";
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        const lowerText = text.toLowerCase();
+        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+            return 'menu';
+        }
         
         const input = text;
         const phone = getPhone(message.chatId);
@@ -189,7 +210,11 @@ const createGroupState = {
     },
     async onMessage(message, data = {}) {
         const text = message.text ? message.text.trim() : "";
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        const lowerText = text.toLowerCase();
+        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+            return 'menu';
+        }
         
         const groupName = text;
         if (groupName.length < 3) {
@@ -210,7 +235,11 @@ const createCurrencyState = {
     name: 'create_circle_ask_currency',
     async onMessage(message, data) {
         const text = message.text ? message.text.trim() : "";
-        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        const lowerText = text.toLowerCase();
+        if (lowerText === 'menu' || lowerText === 'cancel' || lowerText === '/reset') {
+            await db.query("DELETE FROM bot_sessions WHERE chat_id = $1", [message.chatId]);
+            return 'menu';
+        }
         
         const currency = text.toUpperCase();
         const validCurrencies = ['USD', 'EUR', 'GBP', 'CAD'];
