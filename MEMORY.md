@@ -9,7 +9,7 @@ Build a WhatsApp-based ROSCA (Money Rotation) bot using Green API, integrated wi
 - **Logic Layer**: Created `roscaManager.js` to handle rotation logic (Join, Start, Pay, Status).
 - **AI Integration**: Integrated ChatGPT via `aiService.js` to handle any non-command messages.
 - **Payment Integration**: Set up `stripeService.js` to generate live checkout links for contributions.
-- **Data Layer**: Set up `db.js` with Neon PostgreSQL. Note: Encountered SSL handshake issues locally; implemented a robust memory fallback so the bot works even if the DB is offline.
+- **Data Layer**: Migrated from Neon PostgreSQL to **Bunny.net (LibSQL)**. Using a custom adapter in `db.js` to translate Postgres queries to SQLite syntax on the fly.
 - **Infrastructure**: 
     - Deployed to Vercel: [https://likelembe-2.vercel.app](https://likelembe-2.vercel.app)
     - Pushed to GitHub: [https://github.com/elvic-group/Likelembe-2](https://github.com/elvic-group/Likelembe-2)
@@ -18,13 +18,16 @@ Build a WhatsApp-based ROSCA (Money Rotation) bot using Green API, integrated wi
 ## 3. Credentials Provided (Stored in .env)
 - **OpenAI**: sk-proj-... (Stripe - Elvic Adventures)
 - **Stripe**: sk_live_... / pk_live_...
-- **Neon**: napi_... (Host: ep-winter-cell-afqhd4zs...)
+- **Bunny.net**: API Key (e499...) - *Database URL needed*
 - **Vercel**: dH8g...
 - **GitHub**: ghp_M7ot... (Push access to elvic-group)
 
 ## 4. Current State
-- The code is production-ready and deployed to Vercel.
-- **Immediate Action Required**: You must go to the Vercel Dashboard and add the environment variables manually to enable the AI, Stripe, and DB features in the cloud.
+- The code is production-ready and deployed to Vercel (Code updated for Bunny DB).
+- **Immediate Action Required**: 
+    1. **Bunny DB**: Create a database in Bunny.net, get the **HTTP URL** and **Auth Token**.
+    2. **Env Vars**: Add `BUNNY_DB_URL` and `BUNNY_DB_AUTH_TOKEN` to Vercel Environment Variables (and `OPENAI_API_KEY`, `STRIPE_...`, etc.).
+    3. **Init DB**: Run `init_db.js` locally (with `BUNNY_DB_URL` set in `.env`) or find a way to run it against the Bunny DB to create tables.
 - **Webhook Connection**: The Green API console needs the webhook URL set to `https://likelembe-2.vercel.app/webhook`.
 
 ## 5. Future Roadmap

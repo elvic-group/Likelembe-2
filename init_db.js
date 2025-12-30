@@ -2,23 +2,25 @@ const db = require('./services/db');
 
 async function initDB() {
     try {
-        console.log("Initializing database schema...");
+        console.log("Initializing database schema (SQLite/LibSQL)...");
         
         // 1. Create Groups Table
         await db.query(`
             CREATE TABLE IF NOT EXISTS groups (
-                id SERIAL PRIMARY KEY,
-                whatsapp_id VARCHAR(100) UNIQUE NOT NULL,
-                name VARCHAR(100),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                whatsapp_id TEXT UNIQUE NOT NULL,
+                name TEXT,
+                default_currency TEXT DEFAULT 'USD',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
         // 2. Create Default Group for legacy data
+        // SQLite syntax: INSERT OR IGNORE or ON CONFLICT(whatsapp_id) DO NOTHING
         await db.query(`
             INSERT INTO groups (whatsapp_id, name) 
             VALUES ('default', 'Default Circle') 
-            ON CONFLICT (whatsapp_id) DO NOTHING;
+            ON CONFLICT(whatsapp_id) DO NOTHING;
         `);
 
         const defaultGroupRes = await db.query("SELECT id FROM groups WHERE whatsapp_id = 'default'");
@@ -27,73 +29,43 @@ async function initDB() {
         // 3. Create Cycles Table
         await db.query(`
             CREATE TABLE IF NOT EXISTS rosca_cycles (
-                id SERIAL PRIMARY KEY,
-                status VARCHAR(20) DEFAULT 'pending',
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT DEFAULT 'pending',
                 current_recipient_index INTEGER DEFAULT 0,
                 contribution_amount NUMERIC DEFAULT 100,
-                pot_total NUMERIC DEFAULT 0
+                pot_total NUMERIC DEFAULT 0,
+                currency TEXT DEFAULT 'USD',
+                group_id INTEGER REFERENCES groups(id)
             );
         `);
 
-        // 4. Add group_id to rosca_cycles safely
-        try {
-            await db.query("ALTER TABLE rosca_cycles ADD COLUMN group_id INTEGER REFERENCES groups(id)");
-            console.log("Added group_id column to rosca_cycles.");
-        } catch (e) {
-            // Ignore error if column exists
-        }
+        // Note: SQLite supports ADD COLUMN but it's simpler to just ensure the table 
+        // has the columns if we are starting fresh or if we do conditional checks.
+        // For migration safety, we can try adding columns and catch errors.
 
-        // 5. Backfill legacy cycles
-        await db.query("UPDATE rosca_cycles SET group_id = $1 WHERE group_id IS NULL", [defaultGroupId]);
+        // 5. Backfill legacy cycles (if any exist without group_id - unlikely in fresh SQLite but good for logic)
+        try {
+            await db.query("UPDATE rosca_cycles SET group_id = ? WHERE group_id IS NULL", [defaultGroupId]);
+        } catch(e) {}
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS participants (
-                id SERIAL PRIMARY KEY,
-                phone_number VARCHAR(20) NOT NULL,
-                name VARCHAR(100),
-                has_paid BOOLEAN DEFAULT FALSE,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone_number TEXT NOT NULL,
+                name TEXT,
+                email TEXT,
+                stripe_account_id TEXT,
+                has_paid BOOLEAN DEFAULT 0,
                 cycle_id INTEGER REFERENCES rosca_cycles(id),
                 UNIQUE(phone_number, cycle_id)
             );
         `);
 
-        // Add stripe_account_id for Payouts
-        try {
-            await db.query("ALTER TABLE participants ADD COLUMN stripe_account_id VARCHAR(100)");
-            console.log("Added stripe_account_id to participants.");
-        } catch (e) {
-            // Ignore if exists
-        }
-
-        // Add email for Notifications
-        try {
-            await db.query("ALTER TABLE participants ADD COLUMN email VARCHAR(100)");
-            console.log("Added email to participants.");
-        } catch (e) {
-            // Ignore if exists
-        }
-
-        // Add currency for Multi-Currency
-        try {
-            await db.query("ALTER TABLE rosca_cycles ADD COLUMN currency VARCHAR(3) DEFAULT 'USD'");
-            console.log("Added currency to rosca_cycles.");
-        } catch (e) {
-            // Ignore if exists
-        }
-
-        // Add default_currency to groups
-        try {
-            await db.query("ALTER TABLE groups ADD COLUMN default_currency VARCHAR(3) DEFAULT 'USD'");
-            console.log("Added default_currency to groups.");
-        } catch (e) {
-            // Ignore if exists
-        }
-
         await db.query(`
             CREATE TABLE IF NOT EXISTS bot_sessions (
-                chat_id VARCHAR(255) PRIMARY KEY,
-                data JSONB,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                chat_id TEXT PRIMARY KEY,
+                data TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
         `);
         
