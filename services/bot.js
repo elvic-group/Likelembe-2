@@ -41,6 +41,11 @@ const menuState = {
         const text = message.text ? message.text.trim() : "";
         const phone = getPhone(message.chatId);
         
+        // Global Escape Hatch
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel' || text.toLowerCase() === 'exit') {
+            return 'menu';
+        }
+        
         if (text === '1' || text.toLowerCase().includes('join')) {
             return 'join_ask_name';
         }
@@ -87,7 +92,10 @@ const menuState = {
 const joinState = {
     name: 'join_ask_name',
     async onMessage(message, data = {}) {
-        const name = message.text ? message.text.trim() : "";
+        const text = message.text ? message.text.trim() : "";
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        
+        const name = text;
         
         if (name.length < 2) {
             await bot.sendText(message.chatId, "⚠️ That name is too short. Please try again.");
@@ -106,7 +114,10 @@ const joinState = {
 const joinEmailState = {
     name: 'join_ask_email',
     async onMessage(message, data) {
-        const email = message.text ? message.text.trim() : "";
+        const text = message.text ? message.text.trim() : "";
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        
+        const email = text;
 
         if (!email.includes('@')) {
             await bot.sendText(message.chatId, "⚠️ Please enter a valid email address.");
@@ -134,7 +145,10 @@ const joinEmailState = {
 const joinVerifyState = {
     name: 'join_verify_otp',
     async onMessage(message, data) {
-        const input = message.text ? message.text.trim() : "";
+        const text = message.text ? message.text.trim() : "";
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        
+        const input = text;
         const phone = getPhone(message.chatId);
         
         if (input === data.otp) {
@@ -174,7 +188,10 @@ const createGroupState = {
         await bot.sendText(message.chatId, "📝 What should we name the new circle? (e.g., Family Savings)");
     },
     async onMessage(message, data = {}) {
-        const groupName = message.text ? message.text.trim() : "";
+        const text = message.text ? message.text.trim() : "";
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        
+        const groupName = text;
         if (groupName.length < 3) {
             await bot.sendText(message.chatId, "⚠️ Name too short. Try again.");
             return null;
@@ -192,7 +209,10 @@ const createGroupState = {
 const createCurrencyState = {
     name: 'create_circle_ask_currency',
     async onMessage(message, data) {
-        const currency = message.text ? message.text.trim().toUpperCase() : "";
+        const text = message.text ? message.text.trim() : "";
+        if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'cancel') return 'menu';
+        
+        const currency = text.toUpperCase();
         const validCurrencies = ['USD', 'EUR', 'GBP', 'CAD'];
         
         if (!validCurrencies.includes(currency)) {
