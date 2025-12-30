@@ -1,6 +1,10 @@
 const whatsAppClient = require('@green-api/whatsapp-api-client');
 require('dotenv').config();
 
+if (!process.env.GREEN_API_INSTANCE_ID || !process.env.GREEN_API_API_TOKEN) {
+    throw new Error('Missing required Green API environment variables: GREEN_API_INSTANCE_ID and GREEN_API_API_TOKEN');
+}
+
 const restAPI = whatsAppClient.restAPI({
     idInstance: String(process.env.GREEN_API_INSTANCE_ID),
     apiTokenInstance: String(process.env.GREEN_API_API_TOKEN)

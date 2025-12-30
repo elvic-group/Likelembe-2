@@ -5,6 +5,10 @@ const emailService = require('./emailService');
 const PostgresStorage = require('./postgresStorage');
 require('dotenv').config();
 
+if (!process.env.GREEN_API_INSTANCE_ID || !process.env.GREEN_API_API_TOKEN) {
+    throw new Error('Missing required Green API environment variables: GREEN_API_INSTANCE_ID and GREEN_API_API_TOKEN');
+}
+
 const bot = new WhatsAppBot({
     idInstance: String(process.env.GREEN_API_INSTANCE_ID),
     apiTokenInstance: String(process.env.GREEN_API_API_TOKEN),
@@ -83,7 +87,7 @@ const menuState = {
 const joinState = {
     name: 'join_ask_name',
     async onMessage(message, data = {}) {
-        const name = message.text.trim();
+        const name = message.text ? message.text.trim() : "";
         
         if (name.length < 2) {
             await bot.sendText(message.chatId, "⚠️ That name is too short. Please try again.");
@@ -102,7 +106,7 @@ const joinState = {
 const joinEmailState = {
     name: 'join_ask_email',
     async onMessage(message, data) {
-        const email = message.text.trim();
+        const email = message.text ? message.text.trim() : "";
 
         if (!email.includes('@')) {
             await bot.sendText(message.chatId, "⚠️ Please enter a valid email address.");
@@ -130,7 +134,7 @@ const joinEmailState = {
 const joinVerifyState = {
     name: 'join_verify_otp',
     async onMessage(message, data) {
-        const input = message.text.trim();
+        const input = message.text ? message.text.trim() : "";
         const phone = getPhone(message.chatId);
         
         if (input === data.otp) {
@@ -188,7 +192,7 @@ const createGroupState = {
 const createCurrencyState = {
     name: 'create_circle_ask_currency',
     async onMessage(message, data) {
-        const currency = message.text.trim().toUpperCase();
+        const currency = message.text ? message.text.trim().toUpperCase() : "";
         const validCurrencies = ['USD', 'EUR', 'GBP', 'CAD'];
         
         if (!validCurrencies.includes(currency)) {

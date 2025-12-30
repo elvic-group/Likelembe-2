@@ -59,7 +59,7 @@ app.post('/webhook', async (req, res) => {
         await bot.handleNotification({ body: req.body });
         res.status(200).send('OK');
     } catch (error) {
-        console.error("❌ Webhook Error Stack:", error.stack);
+        console.error("❌ Webhook Error:", error.message, "\nStack:", error.stack);
         res.status(500).send('Error');
     }
 });
@@ -99,15 +99,26 @@ app.get('/api/dashboard', async (req, res) => {
 });
 // -----------------
 
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        time: new Date(),
-        config: {
-            instanceId: !!process.env.GREEN_API_INSTANCE_ID,
-            db: !!process.env.DATABASE_URL
-        }
-    });
+app.get('/api/health', async (req, res) => {
+    try {
+        // 1. Check DB
+        await db.query('SELECT 1');
+        
+        res.json({ 
+            status: 'ok', 
+            time: new Date(),
+            services: {
+                db: 'connected'
+            }
+        });
+    } catch (error) {
+        console.error("Health Check Failure:", error.message);
+        res.status(503).json({
+            status: 'error',
+            time: new Date(),
+            error: 'Service Unavailable'
+        });
+    }
 });
 
 app.get('/', (req, res) => {
